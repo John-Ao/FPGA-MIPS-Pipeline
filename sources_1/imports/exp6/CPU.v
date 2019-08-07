@@ -1,0 +1,204 @@
+
+module CPU(reset, clk);
+	input reset, clk;
+	
+	// IF/ID
+	reg [31:0] id_pc_4,id_inst;
+	
+	// ID/IF
+    wire id_branch,id_zero; //put branch in ID
+	wire [31:0] id_pc_imm,id_data1;
+
+	// ID/EX
+	reg [31:0] ex_data1,ex_data2,ex_imm,ex_inst,ex_pc_4;
+	reg [4:0] ex_rt,ex_rd;
+	
+	reg [4:0] ex_aluop;
+	reg [1:0] ex_regdst;
+	reg ex_alusrc1,ex_alusrc2;
+	
+    reg ex_memread,ex_memwrite;
+	
+	reg ex_regwrite;
+	reg [1:0] ex_memtoreg;
+	
+	// EX/MEM
+	reg [31:0] mem_aluout,mem_data2,mem_pc_4;
+	reg [4:0] mem_rt;
+
+	reg mem_memread,mem_memwrite;
+	
+	reg mem_regwrite;
+	reg [1:0] mem_memtoreg;
+	
+	// MEM/WB
+	reg [31:0] wb_data,wb_aluout,wb_pc_4;
+	reg [4:0] wb_rt;
+	
+	reg wb_regwrite;
+	reg [1:0] wb_memtoreg;   //TODO: peripheral device
+        
+    // IF
+    reg [31:0] if_pc,if_inst;
+    reg [2:0] if_pc_src;
+    wire [31:0] if_pc_4,if_pc_next;
+//	   case (if_pc_src)
+//	       3'b000:if_pc<=(ex_branch&ex_zero)?ex_pc_imm:if_pc_4;    // beq
+//	       3'b001:if_pc<={if_pc_4[31:28], ex_inst[25:0], 2'b00};                    // j/jal
+//	       3'b010:if_pc<=ex_data1;                                                // jr/jalr
+//	   endcase
+    assign if_pc_4=if_pc+32'd4;
+    // beq and jump dealt at ID stage, so it will affect next IF
+    assign if_pc_next=(if_pc_src==3'd0)?((id_branch&id_zero)?id_pc_imm:if_pc_4):
+                      (if_pc_src==3'd1)?{if_pc_4[31:28], id_inst[25:0], 2'b00}:id_data1;
+	always @(posedge clk) begin
+	   if_pc<=if_pc_next;
+	   id_pc_4<=if_pc_4;
+	   id_inst<=if_inst;
+	end
+	InstructionMemory instruction_memory1(.Address(if_pc), .Instruction(if_inst));
+	
+	// ID & WB // TODO: is it OK to write wb_out?
+	wire [31:0] id_data2,wb_out;
+	RegisterFile register_file1(.reset(reset), .clk(clk), .RegWrite(wb_regwrite), 
+		.Read_register1(id_inst[25:21]), .Read_register2(id_inst[20:16]), .Write_register(wb_rt),
+		.Write_data(wb_out), .Read_data1(id_data1), .Read_data2(id_data2));
+		
+    wire [1:0] id_regdst;
+	wire [1:0] id_pc_src;  // TODO
+	wire id_memread;
+	wire [1:0] id_memtoreg;// TODO
+	wire [3:0] id_aluop;
+	wire id_extop;
+	wire id_luop;
+	wire id_memwrite;
+	wire id_alusrc1;
+	wire id_alusrc2;
+	wire id_regwrite;
+	
+    Control control1(
+		.OpCode(id_inst[31:26]), .Funct(id_inst[5:0]),
+		.PCSrc(id_pc_src), .Branch(id_branch), .RegWrite(id_regwrite), .RegDst(id_regdst), 
+		.MemRead(id_memread),	.MemWrite(id_memwrite), .MemtoReg(id_memtoreg),
+		.ALUSrc1(id_alusrc1), .ALUSrc2(id_alusrc2), .ExtOp(id_extop), .LuOp(id_luop), .ALUOp(id_aluop));
+
+	wire [31:0] id_imm;
+	assign id_imm=id_luop? {id_inst[15:0], 16'h0000}:{id_extop? {16{id_inst[15]}}: 16'h0000, id_inst[15:0]};
+	assign id_zero=(id_data1==id_data2)?1'b1:1'b0;
+    assign id_pc_imm={id_imm[29:0],2'b00}+ex_pc_4;
+	always @(posedge clk) begin
+	   //TODO forward read_out
+	   ex_data1<=id_data1;
+	   ex_data2<=id_data2;
+	   ex_imm<=id_imm;
+	   ex_inst<=id_inst;
+	   ex_pc_4<=id_pc_4;
+	   ex_rt<=id_inst[20:16];
+	   ex_rd<=id_inst[15:11];
+	   
+	   ex_aluop<=id_aluop;
+	   ex_regdst<=id_regdst;
+	   ex_alusrc1<=id_alusrc1;
+	   ex_alusrc2<=id_alusrc2;
+	   
+	   ex_memread<=id_memread;
+	   ex_memwrite<=id_memwrite;
+	   
+	   ex_regwrite<=id_regwrite;
+	   ex_memtoreg<=id_memtoreg;
+	end
+	
+	// EX
+    wire [4:0] ex_aluctrl;
+	wire ex_sign;
+	ALUControl alu_control1(.ALUOp(ex_aluop), .Funct(ex_inst[5:0]), .ALUCtl(ex_aluctrl), .Sign(ex_sign));
+	
+	wire [31:0] ex_alu_in1, ex_alu_in2, ex_alu_out;
+	assign ex_alu_in1 = ex_alusrc1? {17'h00000, ex_inst[10:6]}: ex_data1;
+	assign ex_alu_in2 = ex_alusrc2? ex_imm: ex_data2;
+	ALU alu1(.in1(ex_alu_in1), .in2(ex_alu_in2), .ALUCtl(ex_aluctrl), .Sign(ex_sign), .out(ex_alu_out));
+    
+    always @(posedge clk) begin
+        mem_aluout<=ex_alu_out;
+        mem_data2<=ex_data2;
+        mem_rt<=(ex_regdst == 2'b00)? ex_rt: (ex_regdst == 2'b01)? ex_rd: 5'b11111;
+        
+        mem_memread<=ex_memread;
+        mem_memwrite<=ex_memwrite;
+        mem_regwrite<=ex_regwrite;
+        mem_memtoreg<=ex_memtoreg;
+    end
+    
+    //MEM
+    wire [31:0] mem_read_data;
+    DataMemory data_memory1(.reset(reset), .clk(clk), .Address(mem_aluout), .Write_data(mem_data2),
+                            .Read_data(mem_read_data), .MemRead(mem_memread), .MemWrite(mem_memwrite));
+    always @(posedge clk) begin
+        wb_data<=mem_read_data;
+        wb_aluout<=mem_aluout;
+        wb_pc_4<=mem_pc_4;
+        wb_rt<=mem_rt;
+        wb_regwrite<=mem_regwrite;
+        wb_memtoreg<=mem_memtoreg;
+    end
+    
+    // WB
+    assign wb_out = (wb_memtoreg == 2'b00)? wb_aluout: (wb_memtoreg == 2'b01)? wb_data: wb_pc_4;
+	
+//	wire [1:0] RegDst;
+//	wire [1:0] PCSrc;
+//	wire Branch;
+//	wire MemRead;
+//	wire [1:0] MemtoReg;
+//	wire [3:0] ALUOp;
+//	wire ExtOp;
+//	wire LuOp;
+//	wire MemWrite;
+//	wire ALUSrc1;
+//	wire ALUSrc2;
+//	wire RegWrite;
+	
+//	Control control1(
+//		.OpCode(Instruction[31:26]), .Funct(Instruction[5:0]),
+//		.PCSrc(PCSrc), .Branch(Branch), .RegWrite(RegWrite), .RegDst(RegDst), 
+//		.MemRead(MemRead),	.MemWrite(MemWrite), .MemtoReg(MemtoReg),
+//		.ALUSrc1(ALUSrc1), .ALUSrc2(ALUSrc2), .ExtOp(ExtOp), .LuOp(LuOp),	.ALUOp(ALUOp));
+	
+//	wire [4:0] Write_register;
+//	assign Write_register = (RegDst == 2'b00)? Instruction[20:16]: (RegDst == 2'b01)? Instruction[15:11]: 5'b11111;
+//	RegisterFile register_file1(.reset(reset), .clk(clk), .RegWrite(RegWrite), 
+//		.Read_register1(Instruction[25:21]), .Read_register2(Instruction[20:16]), .Write_register(Write_register),
+//		.Write_data(Databus3), .Read_data1(Databus1), .Read_data2(Databus2));
+	
+//	wire [31:0] Ext_out;
+//	assign Ext_out = {ExtOp? {16{Instruction[15]}}: 16'h0000, Instruction[15:0]};
+	
+//	wire [31:0] LU_out;
+//	assign LU_out = LuOp? {Instruction[15:0], 16'h0000}: Ext_out;
+	
+//	wire [4:0] ALUCtl;
+//	wire Sign;
+//	ALUControl alu_control1(.ALUOp(ALUOp), .Funct(Instruction[5:0]), .ALUCtl(ALUCtl), .Sign(Sign));
+	
+//	wire [31:0] ALU_in1;
+//	wire [31:0] ALU_in2;
+//	wire [31:0] ALU_out;
+//	wire Zero;
+//	assign ALU_in1 = ALUSrc1? {17'h00000, Instruction[10:6]}: Databus1;
+//	assign ALU_in2 = ALUSrc2? LU_out: Databus2;
+//	ALU alu1(.in1(ALU_in1), .in2(ALU_in2), .ALUCtl(ALUCtl), .Sign(Sign), .out(ALU_out), .zero(Zero));
+	
+//	wire [31:0] Read_data;
+//	DataMemory data_memory1(.reset(reset), .clk(clk), .Address(ALU_out), .Write_data(Databus2), .Read_data(Read_data), .MemRead(MemRead), .MemWrite(MemWrite));
+//	assign Databus3 = (MemtoReg == 2'b00)? ALU_out: (MemtoReg == 2'b01)? Read_data: PC_plus_4;
+	
+//	wire [31:0] Jump_target;
+//	assign Jump_target = {PC_plus_4[31:28], Instruction[25:0], 2'b00};
+	
+//	wire [31:0] Branch_target;
+//	assign Branch_target = (Branch & Zero)? PC_plus_4 + {LU_out[29:0], 2'b00}: PC_plus_4;
+	
+//	assign PC_next = (PCSrc == 2'b00)? Branch_target: (PCSrc == 2'b01)? Jump_target: Databus1;
+
+endmodule
+	
