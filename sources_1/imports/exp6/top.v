@@ -1,27 +1,25 @@
-module top(clk,rst,pc_led,sp_select,sp_led,sp_led_select);
+module top(clk,rst,leds,digits,digit_led_1,digit_led_2);
     input clk,rst;
-    input [1:0] sp_select;
-    output [7:0] pc_led;
-    output [6:0] sp_led;
-    output [3:0] sp_led_select;
-    wire [15:0] num;
+    output [7:0] leds;
+    output [6:0] digit_led_1,digit_led_2;
+    output [7:0] digits;
+    reg [31:0] num;
     reg clk_;
     reg [26:0] divider;
     always@(posedge clk)
         if (divider==27'd100_000_000) begin
             divider<=27'd2;
+            num<=num+32'h1234;
             clk_=~clk_;
         end
         else
             divider<=divider+27'd2;
             
-    CPU cpu(rst,clk_);
-    assign num=(sp_select==2'b00)?top.cpu.register_file1.RF_data[4]:   //$a0
-               (sp_select==2'b01)?top.cpu.register_file1.RF_data[2]:   //$v0
-               (sp_select==2'b10)?top.cpu.register_file1.RF_data[29]:  //$sp
-               top.cpu.register_file1.RF_data[31];                     //$ra
-    assign pc_led=top.cpu.PC[7:0];
-    display d(clk,num,sp_led_select,sp_led);
+//    CPU cpu(rst,clk_);
+//    assign num=top.cpu.data_memory1.PERI_data[4];
+//    assign leds=top.cpu.data_memory1.PERI_data[3][7:0];
+    display d1(clk,num[15:0],digits[3:0],digit_led_1);
+    display d2(clk,num[31:16],digits[7:4],digit_led_2);
    
 endmodule
 
