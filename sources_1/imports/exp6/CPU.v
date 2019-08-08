@@ -224,7 +224,7 @@ module CPU(reset, clk);
     //MEM
     DataMemory data_memory1(.reset(reset), .clk(clk), .clk_count(clk_count), .Address(ex_aluout), .Write_data(ex_data2),
                             .Read_data(mem_read_data), .MemRead(ex_memread), .MemWrite(ex_memwrite));
-    assign mem_out = (mem_memtoreg == 2'b00)? mem_aluout: (mem_memtoreg == 2'b01)? mem_read_data: mem_pc_4;
+    assign mem_out = (mem_memtoreg == 2'b00)? mem_aluout: (mem_memtoreg == 2'b01)? mem_read_data: mem_pc_8;
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             wb_data<=32'b0;
