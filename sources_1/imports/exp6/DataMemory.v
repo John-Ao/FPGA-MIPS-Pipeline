@@ -11,6 +11,19 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
     
     reg [31:0] RAM_data[RAM_SIZE - 1: 0];
     reg [31:0] PERI_data[PERI_SIZE - 1: 0];
+
+    // Address Table
+    // 0x0000 0000 ~ 0x0000 07FF Data Memory
+    // 0x4000 0000               Timer Reset Value
+    // 0x4000 0004               Timer Counter
+    // 0x4000 0008               Timer Control Bits
+    //        [Enable][Interrupt Enable][Interrupt]
+    // 0x4000 000C               LEDs
+    // 0x4000 0010               digit display
+    // 0x4000 0014               system clock counter
+
+
+
     always @(posedge clk)  // if 0x4xxx xxx, use PERI_data
        Read_data <= MemRead? (Address[30]?PERI_data[Address[PERI_SIZE_BIT + 1:2]]:RAM_data[Address[RAM_SIZE_BIT + 1:2]]): 32'h00000000;
     
