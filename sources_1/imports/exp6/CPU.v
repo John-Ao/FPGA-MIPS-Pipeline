@@ -11,7 +11,7 @@ module CPU(reset, clk);
     end
     
     // IF/ID
-    reg [31:0] id_pc_4,id_inst;
+    reg [31:0] id_pc_4,id_pc_8,id_inst;
     
     // ID/IF
     wire id_branch,id_zero; //put branch in ID
@@ -21,12 +21,11 @@ module CPU(reset, clk);
     wire id_hazard; //load-use hazard detection
 
     // ID/EX
-    reg [31:0] ex_data1,ex_data2,ex_imm,ex_inst,ex_pc_4;
+    reg [31:0] ex_data1,ex_data2,ex_imm,ex_inst,ex_pc_8;
     wire [31:0] ex_aluout;
-    reg [4:0] ex_rt,ex_rd;
+    reg [4:0] ex_rd;
     
     reg [4:0] ex_aluop;
-    reg [1:0] ex_regdst;
     reg ex_alusrc1,ex_alusrc2;
     
     reg ex_memread,ex_memwrite;
@@ -35,18 +34,17 @@ module CPU(reset, clk);
     reg [1:0] ex_memtoreg;
     
     // EX/MEM
-    reg [31:0] mem_aluout,mem_data2,mem_pc_4,mem_inst;
+    reg [31:0] mem_aluout,mem_data2,mem_pc_8,mem_inst;
     reg [4:0] mem_rd;
 
     reg mem_memread,mem_memwrite;
     
     reg mem_regwrite;
     reg [1:0] mem_memtoreg;
-    wire [31:0] mem_read_data;      // TODO: this is forwarded to ID for 'beq', potentially elongate path.
+    wire [31:0] mem_read_data,mem_out;      // TODO: this is forwarded to ID for 'beq', potentially elongate path.
 
     // MEM/WB
-    reg [31:0] wb_data,wb_aluout,wb_pc_4;
-    reg [4:0] wb_rd;
+    reg [31:0] wb_data,wb_aluout;
     
     reg wb_regwrite;
     reg [1:0] wb_memtoreg;   //TODO: peripheral device
@@ -54,13 +52,14 @@ module CPU(reset, clk);
     // IF
     reg [31:0] if_pc;
 //    reg [1:0] if_pc_src;
-    wire [31:0] if_pc_4,if_pc_next,if_inst;
+    wire [31:0] if_pc_4,if_pc_8,if_pc_next,if_inst;
 //       case (if_pc_src)
 //           3'b000:if_pc<=(ex_branch&ex_zero)?ex_pc_imm:if_pc_4;    // beq
 //           3'b001:if_pc<={if_pc_4[31:28], ex_inst[25:0], 2'b00};                    // j/jal
 //           3'b010:if_pc<=ex_data1;                                                // jr/jalr
 //       endcase
     assign if_pc_4=if_pc+32'd4;
+    assign if_pc_8=if_pc+32'd8; // delay slot jump
     // beq and jump dealt at ID stage, so it will affect next IF
     // if_pc_src: 0-beq , 1-j/jal , 2-jr/jalr
     assign if_pc_next=id_hazard?if_pc:      // if there's a load-use hazard, stall
@@ -70,23 +69,25 @@ module CPU(reset, clk);
         if (reset) begin
             if_pc<=32'hffff_fffc;
             id_pc_4<=32'd0;
+            id_pc_8<=32'd0;
             id_inst<=32'd0;
         end else begin
             if_pc<=if_pc_next;
             id_pc_4<=if_pc_4;
+            id_pc_8<=if_pc_8;
             id_inst<=if_inst;
         end
     end
     InstructionMemory instruction_memory1(.Address(if_pc), .Instruction(if_inst));
     
-    // ID & WB // TODO: is it OK to write wb_out?
-    wire [31:0] wb_out,id_data1_,id_data2_;
+    // ID & WB // TODO: is it OK to use wb_out? No! Use mem_out & mem_regwrite
+    wire [31:0] id_data1_,id_data2_;
     wire [4:0] id_rs,id_rt;
     assign id_rs=id_inst[25:21];
     assign id_rt=id_inst[20:16];
-    RegisterFile register_file1(.reset(reset), .clk(clk), .RegWrite(wb_regwrite), 
-        .Read_register1(id_rs), .Read_register2(id_rt), .Write_register(wb_rd),
-        .Write_data(wb_out), .Read_data1(id_data1_), .Read_data2(id_data2_));
+    RegisterFile register_file1(.reset(reset), .clk(clk), .RegWrite(mem_regwrite), 
+        .Read_register1(id_rs), .Read_register2(id_rt), .Write_register(mem_rd),
+        .Write_data(mem_out), .Read_data1(id_data1_), .Read_data2(id_data2_));
         
     // TODO: if the critical path is too long, stall before beq
     // forwarding: RegWrite or MemRead or jal or jalr
@@ -95,16 +96,22 @@ module CPU(reset, clk);
     assign ex_is_jalr=(!(|ex_inst[31:26])&&ex_inst[5:0]==6'h9);
     assign mem_is_jal=(mem_inst[31:26]==6'h3);
     assign mem_is_jalr=(!(|mem_inst[31:26])&&mem_inst[5:0]==6'h9);
-    assign id_data1=((ex_is_jal&&(&id_rs))||(ex_is_jalr&&(|ex_rd)&&(ex_rd==id_rs)))?ex_pc_4:        // jal/jalr
+    assign id_data1=((ex_is_jal&&(&id_rs))||(ex_is_jalr&&(|ex_rd)&&(ex_rd==id_rs)))?ex_pc_8:        // jal/jalr
                     (ex_regwrite&&(|ex_rd)&&(ex_rd==id_rs))?ex_aluout:                              // RegWrite rd
-                    ((mem_is_jal&&(&id_rs))||(mem_is_jalr&&(|mem_rd)&&(mem_rd==id_rs)))?mem_pc_4:   // jal/jalr
+                    ((mem_is_jal&&(&id_rs))||(mem_is_jalr&&(|mem_rd)&&(mem_rd==id_rs)))?mem_pc_8:   // jal/jalr
                     ((|mem_rd)&&(mem_rd==id_rs))?(mem_regwrite?mem_aluout:                          // RegWrite rd
                     mem_memread?mem_read_data:id_data1_):id_data1_;                                 // MemRead rd
-    assign id_data2=((ex_is_jal&&(&id_rt))||(ex_is_jalr&&(|ex_rd)&&(ex_rd==id_rt)))?ex_pc_4:        // jal/jalr
+    assign id_data2=((ex_is_jal&&(&id_rt))||(ex_is_jalr&&(|ex_rd)&&(ex_rd==id_rt)))?ex_pc_8:        // jal/jalr
                     (ex_regwrite&&(|ex_rd)&&(ex_rd==id_rt))?ex_aluout:                              // RegWrite rd
-                    ((mem_is_jal&&(&id_rt))||(mem_is_jalr&&(|mem_rd)&&(mem_rd==id_rt)))?mem_pc_4:   // jal/jalr
+                    ((mem_is_jal&&(&id_rt))||(mem_is_jalr&&(|mem_rd)&&(mem_rd==id_rt)))?mem_pc_8:   // jal/jalr
                     ((|mem_rd)&&(mem_rd==id_rt))?(mem_regwrite?mem_aluout:                          // RegWrite rd
                     mem_memread?mem_read_data:id_data2_):id_data2_;                                 // MemRead rd
+    
+    wire cond1,cond2,cond3,cond4;
+    assign cond1=((ex_is_jal&&(&id_rt))||(ex_is_jalr&&(|ex_rd)&&(ex_rd==id_rt)));
+    assign cond2=(ex_regwrite&&(|ex_rd)&&(ex_rd==id_rt));
+    assign cond3=((mem_is_jal&&(&id_rt))||(mem_is_jalr&&(|mem_rd)&&(mem_rd==id_rt)));
+    assign cond4=((|mem_rd)&&(mem_rd==id_rt));
     
     wire [1:0] id_regdst;
     wire id_memread;
@@ -118,7 +125,7 @@ module CPU(reset, clk);
     wire id_regwrite;
     
     // load-use hazard, unless it's load-store
-    assign id_hazard=ex_memread&&(ex_rt!=5'b00000)&&((ex_rt==id_rs)||((ex_rt==id_rt)&&(!id_memwrite)));
+    assign id_hazard=ex_memread&&(!ex_rd)&&((ex_rd==id_rs)||((ex_rd==id_rt)&&(!id_memwrite)));
     
     Control control1(
         .OpCode(id_inst[31:26]), .Funct(id_inst[5:0]),
@@ -129,7 +136,9 @@ module CPU(reset, clk);
     wire [31:0] id_imm;
     assign id_imm=id_luop? {id_inst[15:0], 16'h0000}:{id_extop? {16{id_inst[15]}}: 16'h0000, id_inst[15:0]};
     assign id_zero=(id_data1==id_data2)?1'b1:1'b0;
-    assign id_pc_imm={id_imm[29:0],2'b00}+ex_pc_4;
+    assign id_pc_imm={id_imm[29:0],2'b00}+id_pc_4;
+    wire [4:0] ex_rd_;
+    assign ex_rd_=(id_regdst == 2'b00)? id_rt: (id_regdst == 2'b01)? id_inst[15:11]: 5'b11111;
     always @(posedge clk or posedge reset) begin
        //TODO forward read_out
        if (reset) begin
@@ -137,11 +146,9 @@ module CPU(reset, clk);
            ex_data2<=32'b0;
            ex_imm<=32'b0;
            ex_inst<=32'b0;
-           ex_pc_4<=32'b0;
-           ex_rt<=5'b0;
+           ex_pc_8<=32'b0;
            ex_rd<=5'b0;
            ex_aluop<=5'b0;
-           ex_regdst<=2'b0;
            ex_alusrc1<=1'b0;
            ex_alusrc2<=1'b0;
            
@@ -157,12 +164,10 @@ module CPU(reset, clk);
            ex_data2<=id_data2;
            ex_imm<=id_imm;
            ex_inst<=id_inst;
-           ex_pc_4<=id_pc_4;
-           ex_rt<=id_rt;
-           ex_rd<=id_inst[15:11];
+           ex_pc_8<=id_pc_8;
+           ex_rd<=ex_rd_;
            
            ex_aluop<=id_aluop;
-           ex_regdst<=id_regdst;
            ex_alusrc1<=id_alusrc1;
            ex_alusrc2<=id_alusrc2;
            
@@ -186,16 +191,15 @@ module CPU(reset, clk);
     assign ex_alu_in2 = ex_alusrc2? ex_imm: ex_data2;
     ALU alu1(.in1(ex_alu_in1), .in2(ex_alu_in2), .ALUCtl(ex_aluctrl), .Sign(ex_sign), .out(ex_aluout));
     
-    wire [31:0] mem_data2_,mem_rd_;
+    wire [31:0] mem_data2_;
     // load-store
-    assign mem_data2_=(mem_memread&&(mem_rd==ex_rt))?mem_read_data:ex_data2;
-    assign mem_rd_=(ex_regdst == 2'b00)? ex_rt: (ex_regdst == 2'b01)? ex_rd: 5'b11111;
+    assign mem_data2_=(mem_memread&&(mem_rd==ex_rd))?mem_read_data:ex_data2;
     
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             mem_aluout<=32'b0;
             mem_data2<=32'b0;
-            mem_pc_4<=32'b0;
+            mem_pc_8<=32'b0;
             mem_inst<=32'b0;
             mem_rd<=5'b0;
             
@@ -206,9 +210,9 @@ module CPU(reset, clk);
         end else begin
             mem_aluout<=ex_aluout;
             mem_data2<=mem_data2_;
-            mem_pc_4<=ex_pc_4;
+            mem_pc_8<=ex_pc_8;
             mem_inst<=ex_inst;
-            mem_rd<=mem_rd_;
+            mem_rd<=ex_rd;
             
             mem_memread<=ex_memread;
             mem_memwrite<=ex_memwrite;
@@ -218,28 +222,24 @@ module CPU(reset, clk);
     end
     
     //MEM
-    DataMemory data_memory1(.reset(reset), .clk(clk), .clk_count(clk_count), .Address(mem_aluout), .Write_data(mem_data2),
-                            .Read_data(mem_read_data), .MemRead(mem_memread), .MemWrite(mem_memwrite));
+    DataMemory data_memory1(.reset(reset), .clk(clk), .clk_count(clk_count), .Address(ex_aluout), .Write_data(ex_data2),
+                            .Read_data(mem_read_data), .MemRead(ex_memread), .MemWrite(ex_memwrite));
+    assign mem_out = (mem_memtoreg == 2'b00)? mem_aluout: (mem_memtoreg == 2'b01)? mem_read_data: mem_pc_4;
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             wb_data<=32'b0;
             wb_aluout<=32'b0;
-            wb_pc_4<=32'b0;
-            wb_rd<=5'b0;
             wb_regwrite<=1'b0;
             wb_memtoreg<=1'b0;
         end else begin
             wb_data<=mem_read_data;
             wb_aluout<=mem_aluout;
-            wb_pc_4<=mem_pc_4;
-            wb_rd<=mem_rd;
             wb_regwrite<=mem_regwrite;
             wb_memtoreg<=mem_memtoreg;
         end
     end
     
     // WB
-    assign wb_out = (wb_memtoreg == 2'b00)? wb_aluout: (wb_memtoreg == 2'b01)? wb_data: wb_pc_4;
     
 //    wire [1:0] RegDst;
 //    wire [1:0] PCSrc;
