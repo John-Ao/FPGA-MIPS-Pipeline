@@ -53,6 +53,11 @@ module CPU(reset, clk);
     reg [31:0] if_pc;
 //    reg [1:0] if_pc_src;
     wire [31:0] if_pc_4,if_pc_8,if_pc_next,if_inst;
+    wire [4:0] if_rs,if_rt;
+    wire if_memwrite;
+    assign if_rs=if_inst[25:21];
+    assign if_rt=if_inst[20:16];
+    assign if_memwrite=(if_inst[31:26]==6'h2b)?1'b1:1'b0;
 //       case (if_pc_src)
 //           3'b000:if_pc<=(ex_branch&ex_zero)?ex_pc_imm:if_pc_4;    // beq
 //           3'b001:if_pc<={if_pc_4[31:28], ex_inst[25:0], 2'b00};                    // j/jal
@@ -75,7 +80,7 @@ module CPU(reset, clk);
             if_pc<=if_pc_next;
             id_pc_4<=if_pc_4;
             id_pc_8<=if_pc_8;
-            id_inst<=if_inst;
+            id_inst<=id_hazard?32'b0:if_inst;
         end
     end
     InstructionMemory instruction_memory1(.Address(if_pc), .Instruction(if_inst));
@@ -115,7 +120,7 @@ module CPU(reset, clk);
     wire id_regwrite;
     
     // load-use hazard, unless it's load-store
-    assign id_hazard=ex_memread&&(!ex_rd)&&((ex_rd==id_rs)||((ex_rd==id_rt)&&(!id_memwrite)));
+    assign id_hazard=id_memread&&(|id_rt)&&((id_rt==if_rs)||((id_rt==if_rt)&&(!if_memwrite)));
     
     Control control1(
         .OpCode(id_inst[31:26]), .Funct(id_inst[5:0]),
@@ -142,7 +147,7 @@ module CPU(reset, clk);
            ex_alusrc1<=1'b0;
            ex_alusrc2<=1'b0;
            
-           ex_memread<=1'b0;     // if there's a load-use hazard, flush (block all read/write)
+           ex_memread<=1'b0;
            ex_memwrite<=1'b0;
            
            ex_regwrite<=1'b0;
@@ -161,10 +166,10 @@ module CPU(reset, clk);
            ex_alusrc1<=id_alusrc1;
            ex_alusrc2<=id_alusrc2;
            
-           ex_memread<=id_hazard?1'b0:id_memread;     // if there's a load-use hazard, flush (block all read/write)
-           ex_memwrite<=id_hazard?1'b0:id_memwrite;
+           ex_memread<=id_memread;
+           ex_memwrite<=id_memwrite;
            
-           ex_regwrite<=id_hazard?1'b0:id_regwrite;
+           ex_regwrite<=id_regwrite;
            ex_memtoreg<=id_memtoreg;
            
 //           if_pc_src<=id_pc_src;
@@ -212,7 +217,7 @@ module CPU(reset, clk);
     end
     
     //MEM
-    DataMemory data_memory1(.reset(reset), .clk(clk), .clk_count(clk_count), .Address(ex_aluout), .Write_data(ex_data2),
+    DataMemory data_memory1(.reset(reset), .clk(clk), .clk_count(clk_count), .Address(ex_aluout), .Write_data(mem_data2_),
                             .Read_data(mem_read_data), .MemRead(ex_memread), .MemWrite(ex_memwrite));
     assign mem_out = (mem_memtoreg == 2'b00)? mem_aluout: (mem_memtoreg == 2'b01)? mem_read_data: mem_pc_8;
     always @(posedge clk or posedge reset) begin
@@ -230,61 +235,6 @@ module CPU(reset, clk);
     end
     
     // WB
-    
-//    wire [1:0] RegDst;
-//    wire [1:0] PCSrc;
-//    wire Branch;
-//    wire MemRead;
-//    wire [1:0] MemtoReg;
-//    wire [3:0] ALUOp;
-//    wire ExtOp;
-//    wire LuOp;
-//    wire MemWrite;
-//    wire ALUSrc1;
-//    wire ALUSrc2;
-//    wire RegWrite;
-    
-//    Control control1(
-//        .OpCode(Instruction[31:26]), .Funct(Instruction[5:0]),
-//        .PCSrc(PCSrc), .Branch(Branch), .RegWrite(RegWrite), .RegDst(RegDst), 
-//        .MemRead(MemRead),    .MemWrite(MemWrite), .MemtoReg(MemtoReg),
-//        .ALUSrc1(ALUSrc1), .ALUSrc2(ALUSrc2), .ExtOp(ExtOp), .LuOp(LuOp),    .ALUOp(ALUOp));
-    
-//    wire [4:0] Write_register;
-//    assign Write_register = (RegDst == 2'b00)? Instruction[20:16]: (RegDst == 2'b01)? Instruction[15:11]: 5'b11111;
-//    RegisterFile register_file1(.reset(reset), .clk(clk), .RegWrite(RegWrite), 
-//        .Read_register1(Instruction[25:21]), .Read_register2(Instruction[20:16]), .Write_register(Write_register),
-//        .Write_data(Databus3), .Read_data1(Databus1), .Read_data2(Databus2));
-    
-//    wire [31:0] Ext_out;
-//    assign Ext_out = {ExtOp? {16{Instruction[15]}}: 16'h0000, Instruction[15:0]};
-    
-//    wire [31:0] LU_out;
-//    assign LU_out = LuOp? {Instruction[15:0], 16'h0000}: Ext_out;
-    
-//    wire [4:0] ALUCtl;
-//    wire Sign;
-//    ALUControl alu_control1(.ALUOp(ALUOp), .Funct(Instruction[5:0]), .ALUCtl(ALUCtl), .Sign(Sign));
-    
-//    wire [31:0] ALU_in1;
-//    wire [31:0] ALU_in2;
-//    wire [31:0] ALU_out;
-//    wire Zero;
-//    assign ALU_in1 = ALUSrc1? {17'h00000, Instruction[10:6]}: Databus1;
-//    assign ALU_in2 = ALUSrc2? LU_out: Databus2;
-//    ALU alu1(.in1(ALU_in1), .in2(ALU_in2), .ALUCtl(ALUCtl), .Sign(Sign), .out(ALU_out), .zero(Zero));
-    
-//    wire [31:0] Read_data;
-//    DataMemory data_memory1(.reset(reset), .clk(clk), .Address(ALU_out), .Write_data(Databus2), .Read_data(Read_data), .MemRead(MemRead), .MemWrite(MemWrite));
-//    assign Databus3 = (MemtoReg == 2'b00)? ALU_out: (MemtoReg == 2'b01)? Read_data: PC_plus_4;
-    
-//    wire [31:0] Jump_target;
-//    assign Jump_target = {PC_plus_4[31:28], Instruction[25:0], 2'b00};
-    
-//    wire [31:0] Branch_target;
-//    assign Branch_target = (Branch & Zero)? PC_plus_4 + {LU_out[29:0], 2'b00}: PC_plus_4;
-    
-//    assign PC_next = (PCSrc == 2'b00)? Branch_target: (PCSrc == 2'b01)? Jump_target: Databus1;
 
 endmodule
     
