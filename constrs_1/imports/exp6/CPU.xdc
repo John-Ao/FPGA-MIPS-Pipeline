@@ -8,6 +8,7 @@ set_property -dict {PACKAGE_PIN H6 IOSTANDARD LVCMOS33} [get_ports {leds[6]}]
 set_property -dict {PACKAGE_PIN K1 IOSTANDARD LVCMOS33} [get_ports {leds[7]}]
 
 set_property -dict {PACKAGE_PIN R15 IOSTANDARD LVCMOS33} [get_ports rst]
+set_property CLOCK_DEDICATED_ROUTE FALSE [get_nets {rst}]
 
 set_property -dict {PACKAGE_PIN G2 IOSTANDARD LVCMOS33} [get_ports {digits[7]}]
 set_property -dict {PACKAGE_PIN C2 IOSTANDARD LVCMOS33} [get_ports {digits[6]}]
