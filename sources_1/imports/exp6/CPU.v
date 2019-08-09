@@ -90,28 +90,18 @@ module CPU(reset, clk);
         .Write_data(mem_out), .Read_data1(id_data1_), .Read_data2(id_data2_));
         
     // TODO: if the critical path is too long, stall before beq
-    // forwarding: RegWrite or MemRead or jal or jalr
-    wire ex_is_jal,ex_is_jalr,mem_is_jal,mem_is_jalr;
-    assign ex_is_jal=(ex_inst[31:26]==6'h3);
-    assign ex_is_jalr=(!(|ex_inst[31:26])&&ex_inst[5:0]==6'h9);
-    assign mem_is_jal=(mem_inst[31:26]==6'h3);
-    assign mem_is_jalr=(!(|mem_inst[31:26])&&mem_inst[5:0]==6'h9);
-    assign id_data1=((ex_is_jal&&(&id_rs))||(ex_is_jalr&&(|ex_rd)&&(ex_rd==id_rs)))?ex_pc_8:        // jal/jalr
-                    (ex_regwrite&&(|ex_rd)&&(ex_rd==id_rs))?ex_aluout:                              // RegWrite rd
-                    ((mem_is_jal&&(&id_rs))||(mem_is_jalr&&(|mem_rd)&&(mem_rd==id_rs)))?mem_pc_8:   // jal/jalr
-                    ((|mem_rd)&&(mem_rd==id_rs))?(mem_regwrite?mem_aluout:                          // RegWrite rd
-                    mem_memread?mem_read_data:id_data1_):id_data1_;                                 // MemRead rd
-    assign id_data2=((ex_is_jal&&(&id_rt))||(ex_is_jalr&&(|ex_rd)&&(ex_rd==id_rt)))?ex_pc_8:        // jal/jalr
-                    (ex_regwrite&&(|ex_rd)&&(ex_rd==id_rt))?ex_aluout:                              // RegWrite rd
-                    ((mem_is_jal&&(&id_rt))||(mem_is_jalr&&(|mem_rd)&&(mem_rd==id_rt)))?mem_pc_8:   // jal/jalr
-                    ((|mem_rd)&&(mem_rd==id_rt))?(mem_regwrite?mem_aluout:                          // RegWrite rd
-                    mem_memread?mem_read_data:id_data2_):id_data2_;                                 // MemRead rd
-    
-    wire cond1,cond2,cond3,cond4;
-    assign cond1=((ex_is_jal&&(&id_rt))||(ex_is_jalr&&(|ex_rd)&&(ex_rd==id_rt)));
-    assign cond2=(ex_regwrite&&(|ex_rd)&&(ex_rd==id_rt));
-    assign cond3=((mem_is_jal&&(&id_rt))||(mem_is_jalr&&(|mem_rd)&&(mem_rd==id_rt)));
-    assign cond4=((|mem_rd)&&(mem_rd==id_rt));
+    assign id_data1=(ex_regwrite&&(|ex_rd)&&(ex_rd==id_rs))?
+                     ((ex_memtoreg==2'b0)?ex_aluout:ex_pc_8):    // load-use should've been avoided before this
+                    (mem_regwrite&&(|mem_rd)&&(mem_rd==id_rs))?
+                     ((mem_memtoreg==2'b0)?mem_aluout:
+                      (mem_memtoreg==2'b1)?mem_read_data:mem_pc_8
+                     ):id_data1_;
+    assign id_data2=(ex_regwrite&&(|ex_rd)&&(ex_rd==id_rt))?
+                     ((ex_memtoreg==2'b0)?ex_aluout:ex_pc_8):    // load-use should've been avoided before this
+                    (mem_regwrite&&(|mem_rd)&&(mem_rd==id_rt))?
+                     ((mem_memtoreg==2'b0)?mem_aluout:
+                      (mem_memtoreg==2'b1)?mem_read_data:mem_pc_8
+                     ):id_data2_;
     
     wire [1:0] id_regdst;
     wire id_memread;
