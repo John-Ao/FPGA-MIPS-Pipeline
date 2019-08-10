@@ -130,7 +130,7 @@ module CPU(reset, clk);
 
     wire [31:0] id_imm;
     assign id_imm=id_luop? {id_inst[15:0], 16'h0000}:{id_extop? {16{id_inst[15]}}: 16'h0000, id_inst[15:0]};
-    assign id_zero=(id_data1==id_data2)?1'b1:1'b0;
+    assign id_zero=((id_data1==id_data2)?1'b1:1'b0)^((id_inst[31:26]==6'h5)?1'b1:1'b0); // bne
     assign id_pc_imm={id_imm[29:0],2'b00}+id_pc_4;
     wire [4:0] ex_rd_;
     assign ex_rd_=(id_regdst == 2'b00)? id_rt: (id_regdst == 2'b01)? id_inst[15:11]: 5'b11111;
