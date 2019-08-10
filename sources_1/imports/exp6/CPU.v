@@ -44,10 +44,10 @@ module CPU(reset, clk);
     wire [31:0] mem_read_data,mem_out;      // TODO: this is forwarded to ID for 'beq', potentially elongate path.
 
     // MEM/WB
-    reg [31:0] wb_data,wb_aluout;
+    reg [31:0] wb_out;
     
     reg wb_regwrite;
-    reg [1:0] wb_memtoreg;   //TODO: peripheral device
+    reg [4:0] wb_rd;
         
     // IF
     reg [31:0] if_pc;
@@ -91,7 +91,7 @@ module CPU(reset, clk);
     assign id_rs=id_inst[25:21];
     assign id_rt=id_inst[20:16];
     RegisterFile register_file1(.reset(reset), .clk(clk), .RegWrite(mem_regwrite), 
-        .Read_register1(id_rs), .Read_register2(id_rt), .Write_register(mem_rd),
+        .Read_register1(if_rs), .Read_register2(if_rt), .Write_register(mem_rd),
         .Write_data(mem_out), .Read_data1(id_data1_), .Read_data2(id_data2_));
         
     // TODO: if the critical path is too long, stall before beq
@@ -100,13 +100,13 @@ module CPU(reset, clk);
                     (mem_regwrite&&(|mem_rd)&&(mem_rd==id_rs))?
                      ((mem_memtoreg==2'b0)?mem_aluout:
                       (mem_memtoreg==2'b1)?mem_read_data:mem_pc_8
-                     ):id_data1_;
+                     ):(wb_regwrite&&(|wb_rd)&&(wb_rd==id_rs))?wb_out:id_data1_;    // WB/ID forwarding
     assign id_data2=(ex_regwrite&&(|ex_rd)&&(ex_rd==id_rt))?
                      ((ex_memtoreg==2'b0)?ex_aluout:ex_pc_8):    // load-use should've been avoided before this
                     (mem_regwrite&&(|mem_rd)&&(mem_rd==id_rt))?
                      ((mem_memtoreg==2'b0)?mem_aluout:
                       (mem_memtoreg==2'b1)?mem_read_data:mem_pc_8
-                     ):id_data2_;
+                     ):(wb_regwrite&&(|wb_rd)&&(wb_rd==id_rt))?wb_out:id_data2_;
     
     wire [1:0] id_regdst;
     wire id_memread;
@@ -222,15 +222,13 @@ module CPU(reset, clk);
     assign mem_out = (mem_memtoreg == 2'b00)? mem_aluout: (mem_memtoreg == 2'b01)? mem_read_data: mem_pc_8;
     always @(posedge clk or posedge reset) begin
         if (reset) begin
-            wb_data<=32'b0;
-            wb_aluout<=32'b0;
+            wb_out<=32'b0;
             wb_regwrite<=1'b0;
-            wb_memtoreg<=1'b0;
+            wb_rd<=5'b0;
         end else begin
-            wb_data<=mem_read_data;
-            wb_aluout<=mem_aluout;
+            wb_out<=mem_out;
             wb_regwrite<=mem_regwrite;
-            wb_memtoreg<=mem_memtoreg;
+            wb_rd<=mem_rd;
         end
     end
     
