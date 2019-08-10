@@ -10,6 +10,9 @@ module CPU(reset, clk);
            clk_count<=clk_count+32'b1;
     end
     
+    wire clk_ecp;           // clock exception
+    reg [31:0] epc;
+    
     // IF/ID
     reg [31:0] id_pc_4,id_pc_8,id_inst;
     
@@ -58,11 +61,6 @@ module CPU(reset, clk);
     assign if_rs=if_inst[25:21];
     assign if_rt=if_inst[20:16];
     assign if_memwrite=(if_inst[31:26]==6'h2b)?1'b1:1'b0;
-//       case (if_pc_src)
-//           3'b000:if_pc<=(ex_branch&ex_zero)?ex_pc_imm:if_pc_4;    // beq
-//           3'b001:if_pc<={if_pc_4[31:28], ex_inst[25:0], 2'b00};                    // j/jal
-//           3'b010:if_pc<=ex_data1;                                                // jr/jalr
-//       endcase
     assign if_pc_4=if_pc+32'd4;
     assign if_pc_8=if_pc+32'd8; // delay slot jump
     // beq and jump dealt at ID stage, so it will affect next IF
@@ -95,45 +93,49 @@ module CPU(reset, clk);
         .Write_data(mem_out), .Read_data1(id_data1_), .Read_data2(id_data2_));
         
     // TODO: if the critical path is too long, stall before beq
-    assign id_data1=(ex_regwrite&&(|ex_rd)&&(ex_rd==id_rs))?
+    assign id_data1=(ex_regwrite&&(ex_rd==id_rs))?
                      ((ex_memtoreg==2'b0)?ex_aluout:ex_pc_8):    // load-use should've been avoided before this
-                    (mem_regwrite&&(|mem_rd)&&(mem_rd==id_rs))?
+                    (mem_regwrite&&(mem_rd==id_rs))?
                      ((mem_memtoreg==2'b0)?mem_aluout:
                       (mem_memtoreg==2'b1)?mem_read_data:mem_pc_8
-                     ):(wb_regwrite&&(|wb_rd)&&(wb_rd==id_rs))?wb_out:id_data1_;    // WB/ID forwarding
-    assign id_data2=(ex_regwrite&&(|ex_rd)&&(ex_rd==id_rt))?
+                     ):(wb_regwrite&&(wb_rd==id_rs))?wb_out:id_data1_;    // WB/ID forwarding
+    assign id_data2=(ex_regwrite&&(ex_rd==id_rt))?
                      ((ex_memtoreg==2'b0)?ex_aluout:ex_pc_8):    // load-use should've been avoided before this
-                    (mem_regwrite&&(|mem_rd)&&(mem_rd==id_rt))?
+                    (mem_regwrite&&(mem_rd==id_rt))?
                      ((mem_memtoreg==2'b0)?mem_aluout:
                       (mem_memtoreg==2'b1)?mem_read_data:mem_pc_8
-                     ):(wb_regwrite&&(|wb_rd)&&(wb_rd==id_rt))?wb_out:id_data2_;
+                     ):(wb_regwrite)?wb_out:id_data2_;
+    assign id_zero=((id_data1==id_data2)^(id_inst[31:26]==6'h5)); // bne
     
     wire [1:0] id_regdst;
     wire id_memread;
-    wire [1:0] id_memtoreg;// TODO
+    wire [1:0] id_memtoreg;
     wire [3:0] id_aluop;
     wire id_extop;
     wire id_luop;
     wire id_memwrite;
     wire id_alusrc1;
     wire id_alusrc2;
+    wire id_regwrite_;
     wire id_regwrite;
     
-    // load-use hazard, unless it's load-store
-    assign id_hazard=id_memread&&(|id_rt)&&((id_rt==if_rs)||((id_rt==if_rt)&&(!if_memwrite)));
     
     Control control1(
         .OpCode(id_inst[31:26]), .Funct(id_inst[5:0]),
-        .PCSrc(id_pc_src), .Branch(id_branch), .RegWrite(id_regwrite), .RegDst(id_regdst), 
+        .PCSrc(id_pc_src), .Branch(id_branch), .RegWrite(id_regwrite_), .RegDst(id_regdst), 
         .MemRead(id_memread),    .MemWrite(id_memwrite), .MemtoReg(id_memtoreg),
         .ALUSrc1(id_alusrc1), .ALUSrc2(id_alusrc2), .ExtOp(id_extop), .LuOp(id_luop), .ALUOp(id_aluop));
 
+    // load-use hazard, unless it's load-store
+    assign id_hazard=id_memread&&(|id_rt)&&((id_rt==if_rs)||((id_rt==if_rt)&&(!if_memwrite)));
+
     wire [31:0] id_imm;
-    assign id_imm=id_luop? {id_inst[15:0], 16'h0000}:{id_extop? {16{id_inst[15]}}: 16'h0000, id_inst[15:0]};
-    assign id_zero=((id_data1==id_data2)?1'b1:1'b0)^((id_inst[31:26]==6'h5)?1'b1:1'b0); // bne
+    assign id_imm=id_luop? {id_inst[15:0], 16'h0000}:
+                           {id_extop? {16{id_inst[15]}}: 16'h0000, id_inst[15:0]};
     assign id_pc_imm={id_imm[29:0],2'b00}+id_pc_4;
     wire [4:0] ex_rd_;
     assign ex_rd_=(id_regdst == 2'b00)? id_rt: (id_regdst == 2'b01)? id_inst[15:11]: 5'b11111;
+    assign id_regwrite=(id_regwrite_&&(|ex_rd_))?1'b1:1'b0;         // make sure it's not going to write $zero
     always @(posedge clk or posedge reset) begin
        //TODO forward read_out
        if (reset) begin
@@ -152,8 +154,6 @@ module CPU(reset, clk);
            
            ex_regwrite<=1'b0;
            ex_memtoreg<=2'b0;
-           
-//           if_pc_src<=2'b0;
        end else begin
            ex_data1<=id_data1;
            ex_data2<=id_data2;
@@ -171,8 +171,6 @@ module CPU(reset, clk);
            
            ex_regwrite<=id_regwrite;
            ex_memtoreg<=id_memtoreg;
-           
-//           if_pc_src<=id_pc_src;
        end
     end
     
@@ -218,7 +216,7 @@ module CPU(reset, clk);
     
     //MEM
     DataMemory data_memory1(.reset(reset), .clk(clk), .clk_count(clk_count), .Address(ex_aluout), .Write_data(mem_data2_),
-                            .Read_data(mem_read_data), .MemRead(ex_memread), .MemWrite(ex_memwrite));
+                            .Read_data(mem_read_data), .MemRead(ex_memread), .MemWrite(ex_memwrite), .clk_ecp(clk_ecp));
     assign mem_out = (mem_memtoreg == 2'b00)? mem_aluout: (mem_memtoreg == 2'b01)? mem_read_data: mem_pc_8;
     always @(posedge clk or posedge reset) begin
         if (reset) begin
@@ -231,8 +229,6 @@ module CPU(reset, clk);
             wb_rd<=mem_rd;
         end
     end
-    
-    // WB
 
 endmodule
     

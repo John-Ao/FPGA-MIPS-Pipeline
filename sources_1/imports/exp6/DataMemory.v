@@ -1,8 +1,9 @@
-module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead, MemWrite);
+module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead, MemWrite, clk_ecp);
     input reset, clk;
     input [31:0] clk_count, Address, Write_data;
     input MemRead, MemWrite;
     output reg [31:0] Read_data;
+    output reg clk_ecp;
     
     parameter RAM_SIZE = 512;
     parameter RAM_SIZE_BIT = 9;
@@ -24,9 +25,11 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
 
     wire peri_addr;
     assign peri_addr=(Address[31:28]==4'h4)?1'b1:1'b0;
+    wire [PERI_SIZE_BIT - 1:0] addr_;
+    assign addr_=Address[PERI_SIZE_BIT + 1:2];
 
     always @(posedge clk)  // if 0x4xxx xxx, use PERI_data
-       Read_data <= MemRead? (peri_addr?PERI_data[Address[PERI_SIZE_BIT + 1:2]]:RAM_data[Address[RAM_SIZE_BIT + 1:2]]): 32'h00000000;
+       Read_data <= MemRead? (peri_addr?PERI_data[addr_]:RAM_data[addr_]): 32'h00000000;
     
     integer i;
     always @(posedge reset or posedge clk) begin
@@ -35,20 +38,24 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
                 RAM_data[i] <= 32'h00000000;
             for (i = 0; i < PERI_SIZE; i = i + 1)
                 PERI_data[i] <= 32'h00000000;
+            clk_ecp<=1'b0;
         end else begin
             if (MemWrite) begin
                 if (peri_addr)
-                    PERI_data[Address[PERI_SIZE_BIT + 1:2]] <= Write_data;
+                    PERI_data[addr_] <= Write_data;
                 else
-                    RAM_data[Address[RAM_SIZE_BIT + 1:2]] <= Write_data;
+                    RAM_data[addr_] <= Write_data;
             end
             PERI_data[5]<=clk_count;
             if (PERI_data[2][0]) begin
                 if (&PERI_data[1]) begin
                     PERI_data[1]<=PERI_data[0];
+                    clk_ecp<=1'b1;
                     if (PERI_data[2][1]) PERI_data[2][2]<=1'b1;
-                end
-            end
+                end else
+                    clk_ecp<=1'b0;
+            end else
+                clk_ecp<=1'b0;
         end
     end
 endmodule
