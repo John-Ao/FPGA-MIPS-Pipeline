@@ -15,6 +15,7 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
 
     // Address Table
     // 0x0000 0000 ~ 0x0000 07FF Data Memory
+    
     // 0x4000 0000               Timer Reset Value
     // 0x4000 0004               Timer Counter
     // 0x4000 0008               Timer Control Bits
@@ -52,9 +53,12 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
                 if (&PERI_data[1]) begin
                     PERI_data[1]<=PERI_data[0];
                     clk_ecp<=1'b1;
-                    if (PERI_data[2][1]) PERI_data[2][2]<=1'b1;
-                end else
+                    if (PERI_data[2][1])
+                        PERI_data[2][2]<=1'b1;
+                end else begin
                     clk_ecp<=1'b0;
+                    PERI_data[1]<=PERI_data[1]+32'b1;
+                end
             end else
                 clk_ecp<=1'b0;
         end

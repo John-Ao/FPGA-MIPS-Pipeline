@@ -61,21 +61,25 @@ module CPU(reset, clk);
     assign if_rs=if_inst[25:21];
     assign if_rt=if_inst[20:16];
     assign if_memwrite=(if_inst[31:26]==6'h2b);
-    assign if_pc_4=if_pc+32'd4;
-    assign if_pc_8=if_pc+32'd8; // delay slot jump
+    assign if_pc_4[30:0]=if_pc[30:0]+31'd4;
+    assign if_pc_8[30:0]=if_pc[30:0]+31'd8; // delay slot jump
     // beq and jump dealt at ID stage, so it will affect next IF
     // if_pc_src: 0-beq , 1-j/jal , 2-jr/jalr
-    assign if_pc_next=id_hazard?if_pc:      // if there's a load-use hazard, stall
+    assign if_pc_next=(if_inst[31:26]==6'h10)?epc:  // eret
+                      (clk_ecp&&!if_pc[31])?32'h8000_0000:      // exception handler
+                      id_hazard?if_pc:              // if there's a load-use hazard, stall
                       (id_pc_src==2'd0)?((id_branch&id_zero)?id_pc_imm:if_pc_4):
                       (id_pc_src==2'd1)?{if_pc_4[31:28], id_inst[25:0], 2'b00}:id_data1;
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             if_pc<=32'hffff_fffc;
+            epc<=32'd0;
             id_pc_4<=32'd0;
             id_pc_8<=32'd0;
             id_inst<=32'd0;
         end else begin
             if_pc<=if_pc_next;
+            epc<=if_pc_next;
             id_pc_4<=if_pc_4;
             id_pc_8<=if_pc_8;
             id_inst<=id_hazard?32'b0:if_inst;
