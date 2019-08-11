@@ -15,8 +15,7 @@ module ALU(in1, in2, ALUCtl, Sign, out);
     assign lt_31 = (in1[30:0] < in2[30:0]);
     
     wire lt_signed;
-    assign lt_signed = (in1[31] ^ in2[31])? 
-        ((ss == 2'b01)? 0: 1): lt_31;
+    assign lt_signed = (in1[31] ^ in2[31])? (ss == 2'b10) : lt_31;
     
     always @(*)
         case (ALUCtl)

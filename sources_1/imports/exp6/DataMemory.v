@@ -24,12 +24,13 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
     // 0x4000 0014               system clock counter
 
     wire peri_addr;
-    assign peri_addr=(Address[31:28]==4'h4)?1'b1:1'b0;
+    assign peri_addr=(Address[31:28]==4'h4);
     wire [PERI_SIZE_BIT - 1:0] addr_;
     assign addr_=Address[PERI_SIZE_BIT + 1:2];
 
     always @(posedge clk)  // if 0x4xxx xxx, use PERI_data
-       Read_data <= MemRead? (peri_addr?PERI_data[addr_]:RAM_data[addr_]): 32'h00000000;
+//       Read_data <= MemRead? (peri_addr?PERI_data[addr_]:RAM_data[addr_]): 32'h00000000;
+       Read_data <= (peri_addr?PERI_data[addr_]:RAM_data[addr_]);
     
     integer i;
     always @(posedge reset or posedge clk) begin

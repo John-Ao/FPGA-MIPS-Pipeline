@@ -18,16 +18,16 @@ module Control(OpCode, Funct,
     output [3:0] ALUOp;
     
     assign PCSrc=(OpCode[5:1]==5'h01)?2'b01:(OpCode==6'h00&&(Funct[5:1]==5'h04))?2'b11:2'b00;
-    assign Branch=(OpCode[5:1]==5'h02)?1:0;
-    assign RegWrite=(OpCode==6'h2b||OpCode==6'h04||OpCode==6'h02||(OpCode==6'h00&&Funct==6'h08))?0:1;
+    assign Branch=(OpCode[5:1]==5'h02);
+    assign RegWrite=!(OpCode==6'h2b||OpCode==6'h04||OpCode==6'h02||(OpCode==6'h00&&Funct==6'h08));
     assign RegDst=(OpCode==6'h23||OpCode==6'h2b||OpCode==6'h0f||OpCode[5:2]==4'h02||OpCode==6'h0c)?2'b00:(OpCode==6'h03||(OpCode==6'h00&&Funct==6'h09))?2'b10:2'b01;
-    assign MemRead=(OpCode==6'h23)?1:0;
-    assign MemWrite=(OpCode==6'h2b)?1:0;
+    assign MemRead=(OpCode==6'h23);
+    assign MemWrite=(OpCode==6'h2b);
     assign MemtoReg=(OpCode==6'h23)?2'b01:(OpCode==6'h03||(OpCode==6'h00&&Funct==6'h09))?2'b10:2'b00;
-    assign ALUSrc1=(OpCode==6'h00&&(Funct==6'h00||Funct[5:1]==5'h01))?1:0;
-    assign ALUSrc2=(OpCode==6'h23||OpCode==6'h2b||OpCode==6'h0f||OpCode[5:2]==4'h02||OpCode==6'h0c)?1:0;
-    assign ExtOp=(OpCode==6'h23||OpCode==6'h2b||OpCode[5:1]==5'h04||OpCode==6'h0a||OpCode[5:1]==5'h02)?1:0;
-    assign LuOp=(OpCode==6'h0f)?1:0;
+    assign ALUSrc1=(OpCode==6'h00&&(Funct==6'h00||Funct[5:1]==5'h01));
+    assign ALUSrc2=(OpCode==6'h23||OpCode==6'h2b||OpCode==6'h0f||OpCode[5:2]==4'h02||OpCode==6'h0c);
+    assign ExtOp=(OpCode==6'h23||OpCode==6'h2b||OpCode[5:1]==5'h04||OpCode==6'h0a||OpCode[5:1]==5'h02);
+    assign LuOp=(OpCode==6'h0f);
     
     assign ALUOp[2:0] = 
         (OpCode == 6'h00)? 3'b010: 
