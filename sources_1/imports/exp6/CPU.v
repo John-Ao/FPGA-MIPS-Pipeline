@@ -84,7 +84,7 @@ module CPU(reset, clk);
     InstructionMemory instruction_memory1(.Address(if_pc), .Instruction(if_inst));
     
     // ID & WB // TODO: is it OK to use wb_out? No! Use mem_out & mem_regwrite
-    wire [31:0] id_data1_,id_data2_;
+    wire [31:0] id_data1_,id_data2_,beq_data1,beq_data2;
     wire [4:0] id_rs,id_rt;
     assign id_rs=id_inst[25:21];
     assign id_rt=id_inst[20:16];
@@ -105,7 +105,18 @@ module CPU(reset, clk);
                      ((mem_memtoreg==2'b0)?mem_aluout:
                       (mem_memtoreg==2'b1)?mem_read_data:mem_pc_8
                      ):(wb_regwrite&&(wb_rd==id_rt))?wb_out:id_data2_;
-    assign id_zero=((id_data1==id_data2)^(id_inst[31:26]==6'h5)); // bne
+                     
+    assign beq_data1=(ex_regwrite&&(ex_rd==id_rs))?ex_pc_8:    // load-use should've been avoided before this
+                    (mem_regwrite&&(mem_rd==id_rs))?
+                     ((mem_memtoreg==2'b0)?mem_aluout:
+                      (mem_memtoreg==2'b1)?mem_read_data:mem_pc_8
+                     ):(wb_regwrite&&(wb_rd==id_rs))?wb_out:id_data1_;    // WB/ID forwarding
+    assign beq_data2=(ex_regwrite&&(ex_rd==id_rt))?ex_pc_8:    // load-use should've been avoided before this
+                    (mem_regwrite&&(mem_rd==id_rt))?
+                     ((mem_memtoreg==2'b0)?mem_aluout:
+                      (mem_memtoreg==2'b1)?mem_read_data:mem_pc_8
+                     ):(wb_regwrite&&(wb_rd==id_rt))?wb_out:id_data2_;
+    assign id_zero=((beq_data1==beq_data2)^(id_inst[31:26]==6'h5)); // bne
     
     wire [1:0] id_regdst;
     wire id_memread;
@@ -127,7 +138,6 @@ module CPU(reset, clk);
         .ALUSrc1(id_alusrc1), .ALUSrc2(id_alusrc2), .ExtOp(id_extop), .LuOp(id_luop), .ALUOp(id_aluop));
 
     // load-use hazard, unless it's load-store
-    assign id_hazard=id_memread&&(|id_rt)&&((id_rt==if_rs)||((id_rt==if_rt)&&(!if_memwrite)));
 
     wire [31:0] id_imm;
     assign id_imm=id_luop? {id_inst[15:0], 16'h0000}:
@@ -135,7 +145,9 @@ module CPU(reset, clk);
     assign id_pc_imm={id_imm[29:0],2'b00}+id_pc_4;
     wire [4:0] ex_rd_;
     assign ex_rd_=(id_regdst == 2'b00)? id_rt: (id_regdst == 2'b01)? id_inst[15:11]: 5'b11111;
-    assign id_regwrite=(id_regwrite_&&(|ex_rd_))?1'b1:1'b0;         // make sure it's not going to write $zero
+    assign id_regwrite=(id_regwrite_&&(|ex_rd_));         // make sure it's not going to write $zero
+    assign id_hazard=(id_memread&&(|id_rt)&&((id_rt==if_rs)||((id_rt==if_rt)&&(!if_memwrite))))||
+                     ((if_inst[31:27]==5'h02)&&id_regwrite&&(id_memtoreg==2'b0)&&((ex_rd_==if_rt)||(ex_rd_==if_rs)));
     always @(posedge clk or posedge reset) begin
        //TODO forward read_out
        if (reset) begin
@@ -179,9 +191,10 @@ module CPU(reset, clk);
     wire ex_sign;
     ALUControl alu_control1(.ALUOp(ex_aluop), .Funct(ex_inst[5:0]), .ALUCtl(ex_aluctrl), .Sign(ex_sign));
     
-    wire [31:0] ex_alu_in1, ex_alu_in2;
+    wire [31:0] ex_alu_in1, ex_alu_in2, mem_addr;
     assign ex_alu_in1 = ex_alusrc1? {17'h00000, ex_inst[10:6]}: ex_data1;
     assign ex_alu_in2 = ex_alusrc2? ex_imm: ex_data2;
+    assign mem_addr=ex_alu_in1+ex_alu_in2;
     ALU alu1(.in1(ex_alu_in1), .in2(ex_alu_in2), .ALUCtl(ex_aluctrl), .Sign(ex_sign), .out(ex_aluout));
     
     wire [31:0] mem_data2_;
@@ -215,7 +228,7 @@ module CPU(reset, clk);
     end
     
     //MEM
-    DataMemory data_memory1(.reset(reset), .clk(clk), .clk_count(clk_count), .Address(ex_aluout), .Write_data(mem_data2_),
+    DataMemory data_memory1(.reset(reset), .clk(clk), .clk_count(clk_count), .Address(mem_addr), .Write_data(mem_data2_),
                             .Read_data(mem_read_data), .MemRead(ex_memread), .MemWrite(ex_memwrite), .clk_ecp(clk_ecp));
     assign mem_out = (mem_memtoreg == 2'b00)? mem_aluout: (mem_memtoreg == 2'b01)? mem_read_data: mem_pc_8;
     always @(posedge clk or posedge reset) begin
