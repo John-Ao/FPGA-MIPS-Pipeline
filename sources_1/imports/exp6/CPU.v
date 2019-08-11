@@ -60,7 +60,7 @@ module CPU(reset, clk);
     wire if_memwrite;
     assign if_rs=if_inst[25:21];
     assign if_rt=if_inst[20:16];
-    assign if_memwrite=(if_inst[31:26]==6'h2b)?1'b1:1'b0;
+    assign if_memwrite=(if_inst[31:26]==6'h2b);
     assign if_pc_4=if_pc+32'd4;
     assign if_pc_8=if_pc+32'd8; // delay slot jump
     // beq and jump dealt at ID stage, so it will affect next IF
@@ -104,7 +104,7 @@ module CPU(reset, clk);
                     (mem_regwrite&&(mem_rd==id_rt))?
                      ((mem_memtoreg==2'b0)?mem_aluout:
                       (mem_memtoreg==2'b1)?mem_read_data:mem_pc_8
-                     ):(wb_regwrite)?wb_out:id_data2_;
+                     ):(wb_regwrite&&(wb_rd==id_rt))?wb_out:id_data2_;
     assign id_zero=((id_data1==id_data2)^(id_inst[31:26]==6'h5)); // bne
     
     wire [1:0] id_regdst;
