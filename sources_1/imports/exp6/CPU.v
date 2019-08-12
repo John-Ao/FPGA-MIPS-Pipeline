@@ -210,6 +210,8 @@ module CPU(reset, clk, rx, tx);
     assign ex_alu_in1 = ex_alusrc1? {17'h00000, ex_inst[10:6]}: ex_data1;
     assign ex_alu_in2 = ex_alusrc2? ex_imm: ex_data2;
     assign mem_addr=ex_alu_in1+ex_alu_in2;
+    wire peri_addr;
+    assign peri_addr=(ex_alu_in1[31:28]==4'h4);     // TODO: decide peri before add
     ALU alu1(.in1(ex_alu_in1), .in2(ex_alu_in2), .ALUCtl(ex_aluctrl), .Sign(ex_sign), .out(ex_aluout));
     
     wire [31:0] mem_data2_;
@@ -245,7 +247,7 @@ module CPU(reset, clk, rx, tx);
     //MEM
     DataMemory data_memory1(.reset(reset), .clk(clk), .clk_count(clk_count), .Address(mem_addr), .Write_data(mem_data2_),
                             .Read_data(mem_read_data), .MemRead(ex_memread), .MemWrite(ex_memwrite),
-                            .clk_ecp(clk_ecp), .rx(rx), .tx(tx), .rx_ecp(rx_ecp));
+                            .clk_ecp(clk_ecp), .rx(rx), .tx(tx), .rx_ecp(rx_ecp), .peri_addr(peri_addr));
     assign mem_out = (mem_memtoreg == 2'b00)? mem_aluout: (mem_memtoreg == 2'b01)? mem_read_data: mem_pc_8;
     always @(posedge clk or posedge reset) begin
         if (reset) begin

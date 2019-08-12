@@ -1,5 +1,5 @@
-module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead, MemWrite, clk_ecp, rx, tx, rx_ecp);
-    input reset, clk, rx;
+module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead, MemWrite, clk_ecp, rx, tx, rx_ecp, peri_addr);
+    input reset, clk, rx, peri_addr;
     input [31:0] clk_count, Address, Write_data;
     input MemRead, MemWrite;
     output reg [31:0] Read_data;
@@ -33,24 +33,28 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
     // 0x4000 0028               UART send enable
     // 0x4000 002C               UART send done
 
-    wire peri_addr;
-    assign peri_addr=(Address[31:28]==4'h4);
+//    wire peri_addr;
+//    assign peri_addr=(Address[31:28]==4'h4);
     wire [PERI_SIZE_BIT - 1:0] addr_;
     assign addr_=Address[PERI_SIZE_BIT + 1:2];
 
     
-    wire rx_en,tx_en,rx_done,tx_done;
+    wire rx_en,tx_en_,rx_done,tx_done;
+    wire [7:0] rx_out,tx_in_;
+    reg tx_en;
+    reg [7:0] tx_in;
     assign rx_en=(!PERI_data[7][0]||PERI_data[8][0])||rx;
-    assign tx_en=PERI_data[10][0]&&!PERI_data[11][0];
+    assign tx_en_=PERI_data[10][0]&&!PERI_data[11][0];
     assign rx_ecp=PERI_data[8][0];
-    wire [7:0] rx_out,tx_in;
-    
+    assign tx_in_=PERI_data[9][7:0];
+   
     always @(posedge clk) begin  // if 0x4xxx xxx, use PERI_data
 //       Read_data <= MemRead? (peri_addr?PERI_data[addr_]:RAM_data[addr_]): 32'h00000000;
        Read_data <= (peri_addr?PERI_data[addr_]:RAM_data[addr_]);
+       tx_en<=tx_en_;
+       tx_in<=tx_in_;
     end
     
-    assign tx_in=PERI_data[9][7:0];
     
     uart_rx rx1(clk,rx_en,rx_done,rx_out);
     uart_tx tx1(clk,tx_en,tx_in,tx,tx_done);
