@@ -8,8 +8,8 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
     
     parameter RAM_SIZE = 512;
     parameter RAM_SIZE_BIT = 9;
-    parameter PERI_SIZE = 512;
-    parameter PERI_SIZE_BIT = 9;
+    parameter PERI_SIZE = 16;
+    parameter PERI_SIZE_BIT = 4;
     
     reg [31:0] RAM_data[RAM_SIZE - 1: 0];
     reg [31:0] PERI_data[PERI_SIZE - 1: 0];
@@ -35,8 +35,10 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
 
 //    wire peri_addr;
 //    assign peri_addr=(Address[31:28]==4'h4);
-    wire [PERI_SIZE_BIT - 1:0] addr_;
-    assign addr_=Address[PERI_SIZE_BIT + 1:2];
+    wire [RAM_SIZE_BIT - 1:0] addr_;
+    wire [PERI_SIZE_BIT - 1:0] p_addr_;
+    assign addr_=Address[RAM_SIZE_BIT + 1:2];
+    assign p_addr_=Address[PERI_SIZE_BIT + 1:2];
 
     
     wire rx_en,tx_en_,rx_done,tx_done;
@@ -50,7 +52,7 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
    
     always @(posedge clk) begin  // if 0x4xxx xxx, use PERI_data
 //       Read_data <= MemRead? (peri_addr?PERI_data[addr_]:RAM_data[addr_]): 32'h00000000;
-       Read_data <= (peri_addr?PERI_data[addr_]:RAM_data[addr_]);
+       Read_data <= (peri_addr?PERI_data[p_addr_]:RAM_data[addr_]);
        tx_en<=tx_en_;
        tx_in<=tx_in_;
     end
@@ -70,7 +72,7 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
         end else begin
             if (MemWrite) begin
                 if (peri_addr)
-                    if (addr_!=6) PERI_data[addr_] <= Write_data;
+                    if (p_addr_!=6) PERI_data[p_addr_] <= Write_data;
                 else
                     RAM_data[addr_] <= Write_data;
             end
@@ -88,8 +90,8 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
                 end
             end else
                 clk_ecp<=1'b0;
-            if (!MemWrite||addr_!=8) PERI_data[8][0]<=rx_done|PERI_data[8][0];   // uart receive done
-            if (!MemWrite||addr_!=11) PERI_data[11][0]<=tx_done|PERI_data[11][0];   // uart receive done
+            if (!MemWrite||p_addr_!=8) PERI_data[8][0]<=rx_done|PERI_data[8][0];   // uart receive done
+            if (!MemWrite||p_addr_!=11) PERI_data[11][0]<=tx_done|PERI_data[11][0];   // uart receive done
             PERI_data[6][7:0]<=rx_out;
         end
     end

@@ -24,6 +24,7 @@ module CPU(reset, clk, rx, tx);
     wire [31:0] id_pc_imm,id_data1,id_data2;
     
     wire id_hazard; //load-use hazard detection
+    wire id_legit;
 
     // ID/EX
     reg [31:0] ex_data1,ex_data2,ex_imm,ex_inst,ex_pc_8;
@@ -78,6 +79,7 @@ module CPU(reset, clk, rx, tx);
     assign if_pc_next=(if_inst[31:26]==6'h10)?epc:  // eret
                       (clk_ecp&&!if_pc[31])?32'h8000_0000:      // timer exception handler
                       (rx_ecp&&!if_pc[31])?32'h8000_0008:       // rx exception handler
+                      (!id_legit&&!if_pc[31])?32'h8000_0010:    // unknown instruction exception handler
                       if_pc_next_;
     assign jump_ecp=((rx_ecp||clk_ecp)&&!if_pc[31]&&(if_op[5:1]==5'h1||if_op[5:1]==5'h2||(if_op==6'h0&&if_inst[5:1]==5'h4)));
     always @(posedge clk or posedge reset) begin
@@ -93,7 +95,7 @@ module CPU(reset, clk, rx, tx);
                 epc<=(jump_ecp)?if_pc:if_pc_next_;
             id_pc_4<=if_pc_4;
             id_pc_8<=if_pc_8;
-            id_inst<=(id_hazard||jump_ecp)?32'b0:if_inst;
+            id_inst<=(id_hazard||jump_ecp||!id_legit)?32'b0:if_inst;
         end
     end
     InstructionMemory instruction_memory1(.Address(if_pc), .Instruction(if_inst));
@@ -150,7 +152,7 @@ module CPU(reset, clk, rx, tx);
         .OpCode(id_inst[31:26]), .Funct(id_inst[5:0]),
         .PCSrc(id_pc_src), .Branch(id_branch), .RegWrite(id_regwrite_), .RegDst(id_regdst), 
         .MemRead(id_memread),    .MemWrite(id_memwrite), .MemtoReg(id_memtoreg),
-        .ALUSrc1(id_alusrc1), .ALUSrc2(id_alusrc2), .ExtOp(id_extop), .LuOp(id_luop), .ALUOp(id_aluop));
+        .ALUSrc1(id_alusrc1), .ALUSrc2(id_alusrc2), .ExtOp(id_extop), .LuOp(id_luop), .ALUOp(id_aluop), .Legit(id_legit));
 
     // load-use hazard, unless it's load-store
 
