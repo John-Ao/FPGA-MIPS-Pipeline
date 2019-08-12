@@ -1,5 +1,6 @@
-module CPU(reset, clk);
-    input reset, clk;
+module CPU(reset, clk, rx, tx);
+    input reset, clk, rx;
+    output tx;
     
     reg [31:0] clk_count;          // system clock count
     
@@ -11,6 +12,7 @@ module CPU(reset, clk);
     end
     
     wire clk_ecp;           // clock exception
+    wire rx_ecp;            // uart receive exception
     reg [31:0] epc;
     
     // IF/ID
@@ -28,7 +30,7 @@ module CPU(reset, clk);
     wire [31:0] ex_aluout;
     reg [4:0] ex_rd;
     
-    reg [4:0] ex_aluop;
+    reg [3:0] ex_aluop;
     reg ex_alusrc1,ex_alusrc2;
     
     reg ex_memread,ex_memwrite;
@@ -74,9 +76,10 @@ module CPU(reset, clk);
                       (id_pc_src==2'd0)?((id_branch&id_zero)?id_pc_imm:if_pc_4):
                       (id_pc_src==2'd1)?{if_pc_4[31:28], id_inst[25:0], 2'b00}:id_data1;
     assign if_pc_next=(if_inst[31:26]==6'h10)?epc:  // eret
-                      (clk_ecp&&!if_pc[31])?32'h8000_0000:      // exception handler
+                      (clk_ecp&&!if_pc[31])?32'h8000_0000:      // timer exception handler
+                      (rx_ecp&&!if_pc[31])?32'h8000_0008:       // rx exception handler
                       if_pc_next_;
-    assign jump_ecp=(clk_ecp&&!if_pc[31]&&(if_op[5:1]==5'h1||if_op[5:1]==5'h2||(if_op==6'h0&&if_inst[5:1]==5'h4)));
+    assign jump_ecp=((rx_ecp||clk_ecp)&&!if_pc[31]&&(if_op[5:1]==5'h1||if_op[5:1]==5'h2||(if_op==6'h0&&if_inst[5:1]==5'h4)));
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             if_pc<=32'h7fff_fffc;
@@ -86,7 +89,7 @@ module CPU(reset, clk);
             id_inst<=32'd0;
         end else begin
             if_pc<=if_pc_next;
-            if (clk_ecp&&!if_pc[31])
+            if ((rx_ecp||clk_ecp)&&!if_pc[31])
                 epc<=(jump_ecp)?if_pc:if_pc_next_;
             id_pc_4<=if_pc_4;
             id_pc_8<=if_pc_8;
@@ -169,7 +172,7 @@ module CPU(reset, clk);
            ex_inst<=32'b0;
            ex_pc_8<=32'b0;
            ex_rd<=5'b0;
-           ex_aluop<=5'b0;
+           ex_aluop<=4'b0;
            ex_alusrc1<=1'b0;
            ex_alusrc2<=1'b0;
            
@@ -241,7 +244,8 @@ module CPU(reset, clk);
     
     //MEM
     DataMemory data_memory1(.reset(reset), .clk(clk), .clk_count(clk_count), .Address(mem_addr), .Write_data(mem_data2_),
-                            .Read_data(mem_read_data), .MemRead(ex_memread), .MemWrite(ex_memwrite), .clk_ecp(clk_ecp));
+                            .Read_data(mem_read_data), .MemRead(ex_memread), .MemWrite(ex_memwrite),
+                            .clk_ecp(clk_ecp), .rx(rx), .tx(tx), .rx_ecp(rx_ecp));
     assign mem_out = (mem_memtoreg == 2'b00)? mem_aluout: (mem_memtoreg == 2'b01)? mem_read_data: mem_pc_8;
     always @(posedge clk or posedge reset) begin
         if (reset) begin
