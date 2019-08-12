@@ -71,10 +71,11 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
             clk_ecp<=1'b0;
         end else begin
             if (MemWrite) begin
-                if (peri_addr)
+                if (peri_addr) begin
                     if (p_addr_!=6) PERI_data[p_addr_] <= Write_data;
-                else
+                end else begin
                     RAM_data[addr_] <= Write_data;
+                end
             end
             PERI_data[5]<=clk_count;
             if (PERI_data[2][0]) begin              // timer enabled
