@@ -19,7 +19,7 @@ module Control(OpCode, Funct,
     
     assign PCSrc=(OpCode[5:1]==5'h01)?2'b01:(OpCode==6'h00&&(Funct[5:1]==5'h04))?2'b11:2'b00;
     assign Branch=(OpCode[5:1]==5'h02);
-    assign RegWrite=!(OpCode==6'h2b||OpCode==6'h04||OpCode==6'h02||(OpCode==6'h00&&Funct==6'h08));
+    assign RegWrite=((OpCode==6'h0&&(Funct[5:4]==2'h2||Funct==6'h09||Funct[5:1]==5'h1))||OpCode[5:3]==3'h1||OpCode==6'h23||OpCode==6'h03);
     assign RegDst=(OpCode==6'h23||OpCode==6'h2b||OpCode==6'h0f||OpCode[5:2]==4'h02||OpCode==6'h0c)?2'b00:(OpCode==6'h03||(OpCode==6'h00&&Funct==6'h09))?2'b10:2'b01;
     assign MemRead=(OpCode==6'h23);
     assign MemWrite=(OpCode==6'h2b);
