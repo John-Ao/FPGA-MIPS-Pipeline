@@ -48,7 +48,6 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
     always @(posedge clk) begin  // if 0x4xxx xxx, use PERI_data
 //       Read_data <= MemRead? (peri_addr?PERI_data[addr_]:RAM_data[addr_]): 32'h00000000;
        Read_data <= (peri_addr?PERI_data[addr_]:RAM_data[addr_]);
-       PERI_data[6][7:0]<=rx_out;
     end
     
     assign tx_in=PERI_data[9][7:0];
@@ -67,7 +66,7 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
         end else begin
             if (MemWrite) begin
                 if (peri_addr)
-                    PERI_data[addr_] <= Write_data;
+                    if (addr_!=6) PERI_data[addr_] <= Write_data;
                 else
                     RAM_data[addr_] <= Write_data;
             end
@@ -87,6 +86,7 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
                 clk_ecp<=1'b0;
             if (!MemWrite||addr_!=8) PERI_data[8][0]<=rx_done|PERI_data[8][0];   // uart receive done
             if (!MemWrite||addr_!=11) PERI_data[11][0]<=tx_done|PERI_data[11][0];   // uart receive done
+            PERI_data[6][7:0]<=rx_out;
         end
     end
 endmodule
