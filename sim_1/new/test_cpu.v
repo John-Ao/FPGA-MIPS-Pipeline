@@ -13,6 +13,11 @@ module test_cpu();
     parameter gap=2000;
     reg rx;
     wire tx;
+    
+    wire [6:0] digit_led;
+    wire [7:0] digits;
+    assign digit_led=cpu1.data_memory1.PERI_data[4][6:0];
+    assign digits=cpu1.data_memory1.PERI_data[12][7:0];
 	
     assign num=cpu1.data_memory1.PERI_data[4];
     assign leds=cpu1.data_memory1.PERI_data[3][7:0];
@@ -71,7 +76,7 @@ module test_cpu();
 		rx = 1;
 		#100 reset = 0;
 		
-		#1500;
+		#4500;
         #delay rx<=0;
         
         #delay rx<=1;

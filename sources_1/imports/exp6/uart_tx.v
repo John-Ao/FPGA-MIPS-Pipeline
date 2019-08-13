@@ -131,7 +131,7 @@ module uart_tx
         s_CLEANUP :
           begin
             r_Tx_Done <= 1'b0;
-            r_SM_Main <= s_IDLE;
+            r_SM_Main <= 3'b101;    // s_IDLE; // stay longer
           end
          
          
