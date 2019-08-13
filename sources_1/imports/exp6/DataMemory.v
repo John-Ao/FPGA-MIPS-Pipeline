@@ -32,6 +32,8 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
     // 0x4000 0024               UART send data
     // 0x4000 0028               UART send enable
     // 0x4000 002C               UART send done
+    
+    // 0x4000 0030               digit display enable
 
 //    wire peri_addr;
 //    assign peri_addr=(Address[31:28]==4'h4);
@@ -70,12 +72,8 @@ module DataMemory(reset, clk, clk_count, Address, Write_data, Read_data, MemRead
                 PERI_data[i] <= 32'h00000000;
             clk_ecp<=1'b0;
         end else begin
-            if (MemWrite) begin
-                if (peri_addr)
-                    if (p_addr_!=6) PERI_data[p_addr_] <= Write_data;
-                else
-                    RAM_data[addr_] <= Write_data;
-            end
+            if (MemWrite&&peri_addr&&p_addr_!=6) PERI_data[p_addr_] <= Write_data;
+            if (MemWrite&&!peri_addr) RAM_data[addr_] <= Write_data;
             PERI_data[5]<=clk_count;
             if (PERI_data[2][0]) begin              // timer enabled
                 if (&PERI_data[1]) begin            // time up

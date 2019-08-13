@@ -29,8 +29,9 @@ module Control(OpCode, Funct,
     assign ALUSrc2=(OpCode==6'h23||OpCode==6'h2b||OpCode==6'h0f||OpCode[5:2]==4'h02||OpCode==6'h0c);
     assign ExtOp=(OpCode==6'h23||OpCode==6'h2b||OpCode[5:1]==5'h04||OpCode==6'h0a||OpCode[5:1]==5'h02);
     assign LuOp=(OpCode==6'h0f);
-    assign Legit=(OpCode[5:1]==5'h1||OpCode==6'h4||OpCode[5:1]==5'h4||OpCode[5:1]==5'h5||OpCode==6'hc||OpCode==6'hf||OpCode==6'h23||OpCode==6'h2b)||
-                 (OpCode==6'h0&&(Funct==6'h0||Funct[5:1]==5'h1||Funct[5:1]==5'h4||Funct[5:3]==3'b100||Funct[5:1]==5'b10101));
+    assign Legit=(OpCode[5:1]==5'h1||OpCode[5:1]==5'h2||OpCode[5:1]==5'h4||OpCode[5:1]==5'h5||OpCode==6'hc||OpCode==6'hf||OpCode==6'h23||OpCode==6'h2b)||
+                 (OpCode==6'h0&&(Funct==6'h0||Funct[5:1]==5'h1||Funct[5:1]==5'h4||Funct[5:3]==3'b100||Funct[5:1]==5'b10101))||
+                 (OpCode==6'h10&&Funct==6'h18);
     
     assign ALUOp[2:0] = 
         (OpCode == 6'h00)? 3'b010: 

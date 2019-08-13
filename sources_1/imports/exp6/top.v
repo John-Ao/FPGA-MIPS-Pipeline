@@ -5,7 +5,7 @@ module top(clk,rst,leds,digits,digit_led_1,digit_led_2,Rx,Tx);
     output [7:0] digits;
     input Rx;
     output Tx;
-    wire [31:0] num;
+//    wire [31:0] num;
 //    reg clk_;
 //    reg [26:0] divider;
 //    always@(posedge clk)
@@ -18,10 +18,13 @@ module top(clk,rst,leds,digits,digit_led_1,digit_led_2,Rx,Tx);
 //            divider<=divider+27'd2;
             
     CPU cpu(rst,clk,Rx,Tx);
-    assign num=top.cpu.data_memory1.PERI_data[4];
-    assign leds=top.cpu.data_memory1.PERI_data[3][7:0];
-    display d1(clk,num[15:0],digits[3:0],digit_led_1);
-    display d2(clk,num[31:16],digits[7:4],digit_led_2);
+//    assign num=top.cpu.data_memory1.PERI_data[4];
+    assign leds=top.cpu.if_pc[9:2];//top.cpu.data_memory1.PERI_data[3][7:0];
+//    display d1(clk,num[15:0],digits[3:0],digit_led_1);
+//    display d2(clk,num[31:16],digits[7:4],digit_led_2);
+    assign digit_led_1=top.cpu.data_memory1.PERI_data[4][6:0];
+    assign digit_led_2=top.cpu.data_memory1.PERI_data[4][6:0];
+    assign digits=top.cpu.data_memory1.PERI_data[12][7:0];
    
 endmodule
 
